@@ -10,7 +10,7 @@ interface SocketData {
 const socketData: SocketData = {
 	ids: [],
 }
-
+//socket listeners
 io.on("connection", (socket: Socket) => {
 	console.log(`a client has connected... the id of the client is ${socket.id}`)
 	socket.emit("confirm id", socket.id)
