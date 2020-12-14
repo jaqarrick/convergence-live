@@ -4,12 +4,6 @@ const app = require("express")()
 const server = require("http").createServer(app)
 const io = require("socket.io")(server)
 
-interface SocketData {
-	ids: string[]
-}
-const socketData: SocketData = {
-	ids: [],
-}
 //socket listeners
 io.on("connection", (socket: Socket) => {
 	console.log(`a client has connected... the id of the client is ${socket.id}`)
@@ -27,7 +21,7 @@ io.on("connection", (socket: Socket) => {
 			`Ping message from socket ${socket.id}, relaying ping to other sockets in room: "${roomid}"`
 		)
 		const message = `Hi from socket ${socket.id}`
-		socket.to(roomid).emit("ping peers", message)
+		socket.to(roomid).emit("ping peers", socket.id)
 	})
 	socket.on("disconnect", () => {
 		console.log("A user has disconnected!")

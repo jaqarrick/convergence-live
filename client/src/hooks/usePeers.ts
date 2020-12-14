@@ -1,5 +1,16 @@
 import { useCallback, useState, useEffect } from "react"
 import { socket } from "./service/socket"
+import { PeerObject } from "../../../Types"
+import {
+	onSuccess,
+	onError,
+	receiveOffer,
+	receiveIceCandidate,
+	localDescriptionCreated,
+	handleICECandidate,
+	receiveAnswer,
+} from "./helpers/peerHelpers"
+
 //STUN Server Configuration
 const serverConfig = {
 	iceServers: [
@@ -9,7 +20,10 @@ const serverConfig = {
 	],
 }
 
-const usePeers = () => {
+const usePeers = (localStream: MediaStream | null) => {
+	//where all the Peer Connections Live
+	const [allPeerConnections, setAllPeerConnections] = useState<PeerObject>()
+
 	//SIGNALING / SOCKET CONFIGURATION
 	//when a final socket id is decided by the server, it is sent to the client
 	//this id is stored in the component state
@@ -22,18 +36,8 @@ const usePeers = () => {
 		})
 	}, [setMySocketId])
 
-	//simplified socket message send
-	//might have to include deps in the params
-	const sendSocketMessage = useCallback(
-		(message: string, messageContent: any) => {
-			socket.emit(message, messageContent)
-		},
-		[]
-	)
-
-	//this is a simplified button which should initialize the process
+	//this is attached to a simplified button which should initialize the process
 	//of the peer exchange
-
 	const joinRoom = useCallback(() => {
 		console.log("request to join room")
 		if (mySocketId) socket.emit("join room", mySocketId)
@@ -48,28 +52,16 @@ const usePeers = () => {
 	}, [mySocketId])
 
 	//peer listens for these pings
+	//INIT PEER CONNECTION HERE
 	useEffect(() => {
-		socket.on("ping peers", (message: string) => {
-			console.log(message)
+		socket.on("ping peers", (remoteid: string) => {
+			console.log(`socket ${remoteid} is trying to reach you...`)
+			console.log(`init peer connection with ${remoteid}`)
+			initNewPeerConnection(remoteid)
 		})
 	})
 	//error handlers
-	const onSuccess = useCallback(() => console.log("success!"), [])
-	const onError = useCallback((error: Error) => console.error(error), [])
 	const [allStreams, setAllStreams] = useState<MediaStream[]>([])
-
-	const handleICECandidate = useCallback(
-		e => {
-			console.log("icecandidate event", e)
-			if (e.candidate) {
-				console.log("sent ICE candidate to signaling server / peers")
-				sendSocketMessage("send ICE candidate", e.candidate)
-			} else {
-				console.log(`end of ICE candidates`)
-			}
-		},
-		[sendSocketMessage]
-	)
 
 	//when a remote stream is added to a peer conn, the stream is added
 	//to an array of MediaStreams
@@ -83,21 +75,38 @@ const usePeers = () => {
 		[setAllStreams]
 	)
 
-	const initNewPeerConnection = useCallback(() => {
-		const peerConnection = new RTCPeerConnection(serverConfig)
-		peerConnection.addEventListener("icecandidate", handleICECandidate)
-		peerConnection.addEventListener("track", handleRemoteStreamAdded)
+	const initNewPeerConnection = useCallback(
+		(remoteid: string) => {
+			try {
+				const peerConnection = new RTCPeerConnection(serverConfig)
+				peerConnection.addEventListener("icecandidate", e =>
+					handleICECandidate(e, socket)
+				)
+				peerConnection.addEventListener("track", handleRemoteStreamAdded)
+				if (localStream)
+					localStream
+						.getTracks()
+						.forEach((track: MediaStreamTrack) =>
+							peerConnection.addTrack(track)
+						)
+				console.log("created RTC PeerConnection")
+				setAllPeerConnections(prevConnections => {
+					return { ...prevConnections, [remoteid]: peerConnection }
+				})
+			} catch (e) {
+				console.log(`Failed to create Peer Connection. Error: ${e}`)
+				return
+			}
+			//establish new peer connection and add STUN server config
+		},
+		[localStream, setAllPeerConnections]
+	)
 
-		const localDescriptionCreated = (
-			description: RTCSessionDescriptionInit
-		) => {
-			peerConnection.setLocalDescription(description)
-			console.log(
-				`local SDP set and sent to server: ${JSON.stringify(description)}`
-			)
-			sendSocketMessage("send offer", description)
-		}
-	}, [])
+	// The next step is filtering / routing the socket event listeners
+	// For example, a socket.on("receive ice candidate") should receive the candidate, but also
+	// the socket.id
+	// socket.on("receive ice candidate", data => {socketid, candidate} = data)
+	// Then find the specific peer connection - currentPC = allPeerConnections.socketid
 
 	return {
 		allStreams,
