@@ -10,18 +10,6 @@ interface SocketData {
 const socketData: SocketData = {
 	ids: [],
 }
-const handleSocketId = (id: string, method: string) => {
-	switch (method) {
-		case "add":
-			{
-				socketData.ids = [...socketData.ids, id]
-				console.log(socketData.ids)
-			}
-			break
-		default:
-			console.log("no method exists for this call")
-	}
-}
 
 io.on("connection", (socket: Socket) => {
 	console.log(`a client has connected... the id of the client is ${socket.id}`)
@@ -30,6 +18,16 @@ io.on("connection", (socket: Socket) => {
 	console.log(Object.keys(socket.rooms))
 	socket.on("join room", (socketid: string) => {
 		console.log(`socket: ${socketid} would like to join the room`)
+		socket.join("chat")
+		socket.emit("confirm join", "chat")
+	})
+
+	socket.on("ping peers", roomid => {
+		console.log(
+			`Ping message from socket ${socket.id}, relaying ping to other sockets in room: "${roomid}"`
+		)
+		const message = `Hi from socket ${socket.id}`
+		socket.to(roomid).emit("ping peers", message)
 	})
 	socket.on("disconnect", () => {
 		console.log("A user has disconnected!")
