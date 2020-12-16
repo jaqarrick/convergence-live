@@ -1,5 +1,5 @@
 import { Socket } from "socket.io"
-
+import { ICEPayload, OfferPayload } from "./Types"
 const app = require("express")()
 const server = require("http").createServer(app)
 const io = require("socket.io")(server)
@@ -23,6 +23,33 @@ io.on("connection", (socket: Socket) => {
 		const message = `Hi from socket ${socket.id}`
 		socket.to(roomid).emit("ping peers", socket.id)
 	})
+
+	socket.on("send ICE candidate", (ICEPayload: ICEPayload) => {
+		const { remoteid, candidate } = ICEPayload
+		const ICESendPayload: ICEPayload = {
+			remoteid: socket.id,
+			candidate: candidate,
+		}
+		console.log("received ICE candidate")
+		socket.to(remoteid).emit("send ICE candidate", ICESendPayload)
+	})
+	socket.on("send offer", (offerPayload: OfferPayload) => {
+		const { remoteid, offer } = offerPayload
+		const offerReceivePayload = {
+			remoteid: socket.id,
+			offer: offer,
+		}
+		socket.to(remoteid).emit("send offer", offerReceivePayload)
+	})
+
+	socket.on("send answer", (answerPayload: OfferPayload) => {
+		const { remoteid, offer } = answerPayload
+		const answerReceivePayload: OfferPayload = {
+			remoteid: socket.id,
+			offer: offer,
+		}
+		socket.to(remoteid).emit("send answer", answerReceivePayload)
+	})
 	socket.on("disconnect", () => {
 		console.log("A user has disconnected!")
 	})
@@ -33,6 +60,6 @@ const PORT = 5000
 server.listen(PORT, (err: Error) => {
 	if (err) console.log(err)
 	else {
-		console.log(`The server is up and running at http://localhost://${PORT}`)
+		console.log(`The server is up and running at http://localhost:${PORT}`)
 	}
 })
